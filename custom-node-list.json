@@ -16480,6 +16480,17 @@
             "description": "Various image processing nodes."
         },
         {
+  "author": "mithamunda",
+  "title": "ComfyUI Ollama Killer",
+  "id": "ollama_killer",
+  "reference": "https://github.com/mithamunda/ComfyUI-ollama_killer",
+  "files": [
+      "https://github.com/mithamunda/ComfyUI-ollama_killer"
+  ],
+  "install_type": "git-clone",
+  "description": "This custom node allows users to terminate the Ollama server task in ComfyUI based on specific input text, designed for streamlined workflow control."
+       },
+        {
             "author": "aimingfail",
             "title": "Image2Halftone Node for ComfyUI",
             "id": "img2halftone",
