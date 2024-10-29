@@ -16491,6 +16491,17 @@
   "description": "This custom node allows users to terminate the Ollama server task in ComfyUI based on specific input text, designed for streamlined workflow control."
        },
         {
+    "author": "mithamunda",
+    "title": "SD3.5 Empty Latent Size Picker",
+    "id": "sd3_5_empty_latent_size_picker",
+    "reference": "https://github.com/mithamunda/ComfyUI-SD3.5-Latent-Size-Picker",
+    "files": [
+        "https://github.com/mithamunda/ComfyUI-SD3.5-Latent-Size-Picker"
+    ],
+    "install_type": "git-clone",
+    "description": "A utility node for generating empty latent tensors in Stable Diffusion v3.5-compatible resolutions, with options for batch size, width/height overrides, and aspect ratio inversion."
+       },
+        {
             "author": "aimingfail",
             "title": "Image2Halftone Node for ComfyUI",
             "id": "img2halftone",
