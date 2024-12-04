@@ -98,36 +98,6 @@ def remap_pip_package(pkg):
 std_log_lock = threading.Lock()
 
 
-class TerminalHook:
-    def __init__(self):
-        self.hooks = {}
-
-    def add_hook(self, k, v):
-        self.hooks[k] = v
-
-    def remove_hook(self, k):
-        if k in self.hooks:
-            del self.hooks[k]
-
-    def write_stderr(self, msg):
-        for v in self.hooks.values():
-            try:
-                v.write_stderr(msg)
-            except Exception:
-                pass
-
-    def write_stdout(self, msg):
-        for v in self.hooks.values():
-            try:
-                v.write_stdout(msg)
-            except Exception:
-                pass
-
-
-terminal_hook = TerminalHook()
-sys.__comfyui_manager_terminal_hook = terminal_hook
-
-
 def handle_stream(stream, prefix):
     stream.reconfigure(encoding=locale.getpreferredencoding(), errors='replace')
     for msg in stream:
@@ -270,11 +240,9 @@ try:
                     if self.is_stdout:
                         write_stdout(message)
                         original_stdout.flush()
-                        terminal_hook.write_stderr(message)
                     else:
                         write_stderr(message)
                         original_stderr.flush()
-                        terminal_hook.write_stdout(message)
 
         def flush(self):
             log_file.flush()
@@ -417,30 +385,7 @@ check_bypass_ssl()
 # Perform install
 processed_install = set()
 script_list_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "startup-scripts", "install-scripts.txt")
-pip_map = None
-
-
-def get_installed_packages():
-    global pip_map
-
-    if pip_map is None:
-        try:
-            result = subprocess.check_output([sys.executable, '-m', 'pip', 'list'], universal_newlines=True)
-
-            pip_map = {}
-            for line in result.split('\n'):
-                x = line.strip()
-                if x:
-                    y = line.split()
-                    if y[0] == 'Package' or y[0].startswith('-'):
-                        continue
-
-                    pip_map[y[0]] = y[1]
-        except subprocess.CalledProcessError as e:
-            print(f"[ComfyUI-Manager] Failed to retrieve the information of installed pip packages.")
-            return set()
-
-    return pip_map
+pip_fixer = PIPFixer(get_installed_packages())
 
 
 def is_installed(name):
@@ -652,8 +597,11 @@ if os.path.exists(script_list_path):
     print("\n[ComfyUI-Manager] Startup script completed.")
     print("#######################################################################\n")
 
+pip_fixer.fix_broken()
+
 del processed_install
-del pip_map
+del pip_fixer
+clear_pip_cache()
 
 
 def check_windows_event_loop_policy():
