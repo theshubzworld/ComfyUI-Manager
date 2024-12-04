@@ -16502,6 +16502,17 @@
     "description": "A utility node for generating empty latent tensors in Stable Diffusion v3.5-compatible resolutions, with options for batch size, width/height overrides, and aspect ratio inversion."
        },
         {
+    "author": "mithamunda",
+    "title": "Together Vision Node",
+    "id": "comfyui_together_vision",
+    "reference": "https://github.com/mithamunda/ComfyUI-TogetherVision",
+    "files": [
+        "https://github.com/mithamunda/ComfyUI-TogetherVision"
+    ],
+    "install_type": "git-clone",
+    "description": "A custom ComfyUI node for generating AI-powered image descriptions using Together AI's Vision models (both free and paid versions). Features include customizable prompts, advanced generation parameters, and robust image handling with comprehensive error management."
+       },
+        {
             "author": "aimingfail",
             "title": "Image2Halftone Node for ComfyUI",
             "id": "img2halftone",
