@@ -12,6 +12,7 @@ from rich import print
 from typing_extensions import List, Annotated
 import re
 import git
+import importlib
 
 
 sys.path.append(os.path.dirname(__file__))
@@ -34,7 +35,6 @@ import cm_global
 import manager_core as core
 from manager_core import unified_manager
 import cnr_utils
-
 
 
 comfyui_manager_path = os.path.abspath(os.path.dirname(__file__))
@@ -70,9 +70,8 @@ core.check_invalid_nodes()
 def read_downgrade_blacklist():
     try:
         import configparser
-        config_path = os.path.join(os.path.dirname(__file__), "config.ini")
         config = configparser.ConfigParser()
-        config.read(config_path)
+        config.read(core.manager_config.path)
         default_conf = config['default']
 
         if 'downgrade_blacklist' in default_conf:
@@ -88,12 +87,20 @@ read_downgrade_blacklist()  # This is a preparation step for manager_core
 
 
 class Ctx:
+    folder_paths = None
+    
     def __init__(self):
         self.channel = 'default'
         self.no_deps = False
         self.mode = 'cache'
         self.user_directory = None
         self.custom_nodes_paths = [os.path.join(core.comfy_path, 'custom_nodes')]
+        
+        if Ctx.folder_paths is None:
+            try:
+                Ctx.folder_paths = importlib.import_module('folder_paths')
+            except ImportError:
+                print("Warning: Unable to import folder_paths module")
 
     def set_channel_mode(self, channel, mode):
         if mode is not None:
@@ -110,7 +117,7 @@ class Ctx:
         if channel is not None:
             self.channel = channel
 
-        asyncio.run(unified_manager.reload(cache_mode=self.mode == 'cache'))
+        asyncio.run(unified_manager.reload(cache_mode=self.mode == 'cache', dont_wait=False))
         asyncio.run(unified_manager.load_nightly(self.channel, self.mode))
 
     def set_no_deps(self, no_deps):
@@ -127,9 +134,9 @@ class Ctx:
         core.update_user_directory(user_directory)
 
         if os.path.exists(core.manager_pip_overrides_path):
-            cm_global.pip_overrides = {'numpy': 'numpy<2'}
             with open(core.manager_pip_overrides_path, 'r', encoding="UTF-8", errors="ignore") as json_file:
                 cm_global.pip_overrides = json.load(json_file)
+                cm_global.pip_overrides = {'numpy': 'numpy<2'}
 
     @staticmethod
     def get_startup_scripts_path():
@@ -145,7 +152,10 @@ class Ctx:
 
     @staticmethod
     def get_custom_nodes_paths():
-        return folder_paths.get_folder_paths('custom_nodes')
+        if Ctx.folder_paths is None:
+            print("Error: folder_paths module is not available")
+            return []
+        return Ctx.folder_paths.get_folder_paths('custom_nodes')
 
 
 cmd_ctx = Ctx()
@@ -526,7 +536,7 @@ def get_all_installed_node_specs():
         res.append(node_spec_str)
         processed.add(k)
 
-    for k, _ in unified_manager.cnr_inactive_nodes.keys():
+    for k in unified_manager.cnr_inactive_nodes.keys():
         if k in processed:
             continue
 
@@ -535,7 +545,7 @@ def get_all_installed_node_specs():
             node_spec_str = f"{k}@{str(latest[0])}"
             res.append(node_spec_str)
 
-    for k, _ in unified_manager.nightly_inactive_nodes.keys():
+    for k in unified_manager.nightly_inactive_nodes.keys():
         if k in processed:
             continue
 
@@ -613,7 +623,10 @@ def install(
     cmd_ctx.set_user_directory(user_directory)
     cmd_ctx.set_channel_mode(channel, mode)
     cmd_ctx.set_no_deps(no_deps)
+
+    pip_fixer = manager_util.PIPFixer(manager_util.get_installed_packages())
     for_each_nodes(nodes, act=install_node)
+    pip_fixer.fix_broken()
 
 
 @app.command(help="Reinstall custom nodes")
@@ -648,7 +661,10 @@ def reinstall(
     cmd_ctx.set_user_directory(user_directory)
     cmd_ctx.set_channel_mode(channel, mode)
     cmd_ctx.set_no_deps(no_deps)
+
+    pip_fixer = manager_util.PIPFixer(manager_util.get_installed_packages())
     for_each_nodes(nodes, act=reinstall_node)
+    pip_fixer.fix_broken()
 
 
 @app.command(help="Uninstall custom nodes")
@@ -700,12 +716,15 @@ def update(
     if 'all' in nodes:
         asyncio.run(auto_save_snapshot())
 
+    pip_fixer = manager_util.PIPFixer(manager_util.get_installed_packages())
+
     for x in nodes:
         if x.lower() in ['comfyui', 'comfy', 'all']:
             update_comfyui()
             break
 
     update_parallel(nodes)
+    pip_fixer.fix_broken()
 
 
 @app.command(help="Disable custom nodes")
@@ -798,7 +817,9 @@ def fix(
     if 'all' in nodes:
         asyncio.run(auto_save_snapshot())
 
+    pip_fixer = manager_util.PIPFixer(manager_util.get_installed_packages())
     for_each_nodes(nodes, fix_node, allow_all=True)
+    pip_fixer.fix_broken()
 
 
 @app.command("show-versions", help="Show all available versions of the node")
@@ -1049,12 +1070,14 @@ def restore_snapshot(
             print(f"[bold red]ERROR: `{snapshot_path}` is not exists.[/bold red]")
             exit(1)
 
+    pip_fixer = manager_util.PIPFixer(manager_util.get_installed_packages())
     try:
         asyncio.run(core.restore_snapshot(snapshot_path, extras))
     except Exception:
         print("[bold red]ERROR: Failed to restore snapshot.[/bold red]")
         traceback.print_exc()
         raise typer.Exit(code=1)
+    pip_fixer.fix_broken()
 
 
 @app.command(
@@ -1078,11 +1101,14 @@ def restore_dependencies(
 
     total = len(node_paths)
     i = 1
+
+    pip_fixer = manager_util.PIPFixer(manager_util.get_installed_packages())
     for x in node_paths:
         print("----------------------------------------------------------------------------------------------------")
         print(f"Restoring [{i}/{total}]: {x}")
         unified_manager.execute_install_script('', x, instant_execution=True)
         i += 1
+    pip_fixer.fix_broken()
 
 
 @app.command(
@@ -1094,7 +1120,10 @@ def post_install(
         )
 ):
     path = os.path.expanduser(path)
+
+    pip_fixer = manager_util.PIPFixer(manager_util.get_installed_packages())
     unified_manager.execute_install_script('', path, instant_execution=True)
+    pip_fixer.fix_broken()
 
 
 @app.command(
@@ -1136,6 +1165,8 @@ def install_deps(
                 print(f"[bold red]Invalid json file: {deps}[/bold red]")
                 exit(1)
 
+
+            pip_fixer = manager_util.PIPFixer(manager_util.get_installed_packages())
             for k in json_obj['custom_nodes'].keys():
                 state = core.simple_check_custom_node(k)
                 if state == 'installed':
@@ -1144,6 +1175,7 @@ def install_deps(
                     asyncio.run(core.gitclone_install(k, instant_execution=True))
                 else:  # disabled
                     core.gitclone_set_active([k], False)
+            pip_fixer.fix_broken()
 
         print("Dependency installation and activation complete.")
 

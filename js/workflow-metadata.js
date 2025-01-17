@@ -17,16 +17,18 @@ import { api } from "../../scripts/api.js";
 class WorkflowMetadataExtension {
   constructor() {
     this.name = "Comfy.CustomNodesManager.WorkflowMetadata";
-    this.installedNodeVersions = {};
+    this.installedNodes = {};
     this.comfyCoreVersion = null;
   }
 
   /**
-   * Get the installed node versions
-   * @returns {Promise<Record<string, string>>} The mapping from node name to version
-   * version can either be a git commit hash or a semantic version such as "1.0.0"
+   * Get the installed nodes info
+   * @returns {Promise<Record<string, {ver: string, cnr_id: string, enabled: boolean}>>} The mapping from node name to its info.
+   * ver can either be a git commit hash or a semantic version such as "1.0.0"
+   * cnr_id is the id of the node in the ComfyRegistry
+   * enabled is true if the node is enabled, false if it is disabled
    */
-  async getInstalledNodeVersions() {
+  async getInstalledNodes() {
     const res = await api.fetchApi("/customnode/installed");
     return await res.json();
   }
@@ -48,8 +50,12 @@ class WorkflowMetadataExtension {
 
       if (modules[0] === "custom_nodes") {
         const nodePackageName = modules[1];
-        const nodeVersion = this.installedNodeVersions[nodePackageName];
-        nodeVersions[nodePackageName] = nodeVersion;
+        const nodeInfo =
+          this.installedNodes[nodePackageName] ??
+          this.installedNodes[nodePackageName.toLowerCase()];
+        if (nodeInfo) {
+          nodeVersions[nodePackageName] = nodeInfo.ver;
+        }
       } else if (["nodes", "comfy_extras"].includes(modules[0])) {
         nodeVersions["comfy-core"] = this.comfyCoreVersion;
       } else {
@@ -61,7 +67,7 @@ class WorkflowMetadataExtension {
 
   async init() {
     const extension = this;
-    this.installedNodeVersions = await this.getInstalledNodeVersions();
+    this.installedNodes = await this.getInstalledNodes();
     this.comfyCoreVersion = (await api.getSystemStats()).system.comfyui_version;
 
     // Attach metadata when app.graphToPrompt is called.
@@ -74,7 +80,11 @@ class WorkflowMetadataExtension {
         workflow.extra = {};
       }
       const graph = this;
-      workflow.extra["node_versions"] = extension.getGraphNodeVersions(graph);
+      try {
+        workflow.extra["node_versions"] = extension.getGraphNodeVersions(graph);
+      } catch (e) {
+        console.error(e);
+      }
 
       return workflow;
     };
